@@ -101,7 +101,7 @@ func (c *Client) CategoryTree(ctx context.Context, ref string, limit int) ([]*Ca
 		}
 		seen[id] = true
 		out = append(out, &Category{ID: id, Name: name, URL: BaseURL + "/b/" + id})
-		return !(limit > 0 && len(out) >= limit)
+		return limit <= 0 || len(out) < limit
 	})
 	return out, nil
 }

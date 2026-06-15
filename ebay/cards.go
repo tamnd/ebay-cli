@@ -45,7 +45,7 @@ func parseCards(doc *goquery.Document, limit int) []*Listing {
 		}
 		seen[l.ID] = true
 		out = append(out, l)
-		return !(limit > 0 && len(out) >= limit)
+		return limit <= 0 || len(out) < limit
 	})
 	return out
 }

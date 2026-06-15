@@ -124,12 +124,12 @@ func (a *apiClient) getJSON(ctx context.Context, url string, out any) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(resp.Body)
-	switch {
-	case resp.StatusCode == http.StatusOK:
+	switch resp.StatusCode {
+	case http.StatusOK:
 		return json.Unmarshal(b, out)
-	case resp.StatusCode == http.StatusNotFound:
+	case http.StatusNotFound:
 		return ErrNotFound
-	case resp.StatusCode == http.StatusTooManyRequests:
+	case http.StatusTooManyRequests:
 		return ErrRateLimited
 	default:
 		return fmt.Errorf("browse api: http %d", resp.StatusCode)

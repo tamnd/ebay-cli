@@ -60,7 +60,7 @@ func (c *Client) Deals(ctx context.Context, limit int) ([]*Deal, error) {
 		}
 		seen[id] = true
 		out = append(out, d)
-		return !(limit > 0 && len(out) >= limit)
+		return limit <= 0 || len(out) < limit
 	})
 	return out, nil
 }
