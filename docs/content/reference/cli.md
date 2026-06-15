@@ -8,21 +8,31 @@ weight: 10
 ebay <command> [arguments] [flags]
 ```
 
-Run `ebay <command> --help` for the full flag list on any command. This
-page is the map; keep it in step with the real command tree as you add to it.
+Run `ebay <command> --help` for the full flag list on any command.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `page <ref>` | Fetch a page by path or URL |
-| `links <ref>` | List the pages a page links to |
+| `search <query>` | Keyword search (best-effort, may hit the bot wall) |
+| `item <id>` | Show one item by id (best-effort, may hit the bot wall) |
+| `deals` | The current daily deals |
+| `suggest <prefix>` | Search-box autocomplete suggestions |
+| `seller show <username>` | Show a seller's storefront profile |
+| `seller listings <username>` | List a seller's active listings |
+| `category show <id>` | Show a category's metadata |
+| `category browse <id>` | List the items in a category |
+| `category tree <id>` | List a category's child categories |
+| `ref id <ref>` | Classify a reference into its (kind, id), offline |
+| `ref url <kind> <id>` | Build the canonical URL for a (kind, id), offline |
 | `serve [--addr]` | Serve the operations over HTTP as NDJSON |
 | `mcp` | Run as an MCP server over stdio |
 | `version` | Print the version and exit |
 
-`page` and `links` are the example operations the scaffold ships. Add a row here
-per operation you declare in `ebay/domain.go`.
+A category is addressed by its numeric id, like `9355`, or a `/b/` URL. A seller
+is addressed by username, store slug, or URL. The `item` and `search` commands
+are soft-walled from datacenter IPs; see
+[what anonymous access reaches](/getting-started/introduction/#what-anonymous-access-reaches).
 
 ## Global flags
 
@@ -44,7 +54,11 @@ These are shared by every operation, so they work the same on every command.
 | `-v, --verbose` | Increase verbosity (repeatable) |
 | `-q, --quiet` | Suppress progress output |
 | `--color` | `auto`, `always`, or `never` |
+| `--user-agent` | Override the User-Agent sent with each request |
+| `--marketplace` | Browse API marketplace id (default `EBAY_US`) |
+| `--cache-ttl` | How long a cached response stays fresh |
+| `--refresh` | Fetch fresh copies and rewrite the cache, ignoring any hit |
 
 See [output formats](/reference/output/) for what `-o`, `--fields`, and
 `--template` produce, and [configuration](/reference/configuration/) for
-environment variables and defaults.
+environment variables, the Browse API credentials, and defaults.

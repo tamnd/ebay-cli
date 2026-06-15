@@ -1,14 +1,13 @@
 ---
 title: "Resource URIs"
-description: "Use ebay as a database/sql-style driver so a host program can address ebay as ebay:// URIs."
+description: "Use ebay as a database/sql-style driver so a host program can address eBay as ebay:// URIs."
 weight: 20
 ---
 
-`ebay` is a command line, but the `ebay` Go package is also a
-small driver that makes ebay addressable as a resource URI. A host
-program registers it the way a program registers a database driver with
-`database/sql`, then dereferences `ebay://` URIs without knowing
-anything about how ebay is fetched.
+`ebay` is a command line, but the `ebay` Go package is also a small driver that
+makes eBay addressable as a resource URI. A host program registers it the way a
+program registers a database driver with `database/sql`, then dereferences
+`ebay://` URIs without knowing anything about how eBay is fetched.
 
 The host that does this today is [ant](https://github.com/tamnd/ant), a single
 binary that puts one URI namespace over a family of site tools. The examples
@@ -16,34 +15,37 @@ below use `ant`; any program that links the package gets the same behaviour.
 
 ## Mounting the driver
 
-A host enables the driver with one blank import, exactly like `import _
-"github.com/lib/pq"`:
+A host enables the driver with one blank import, exactly like
+`import _ "github.com/lib/pq"`:
 
 ```go
 import _ "github.com/tamnd/ebay-cli/ebay"
 ```
 
-The package's `init` registers a domain with the scheme `ebay` for the
-host `www.ebay.com`. The standalone `ebay` binary does not change.
+The package's `init` registers a domain with the scheme `ebay` for the hosts
+`www.ebay.com`, `ebay.com`, and `m.ebay.com`. The standalone `ebay` binary does
+not change.
 
 ## Addressing records
 
-A URI is `scheme://authority/id`. The scaffold ships one type:
+A URI is `scheme://authority/id`. The resolver types are:
 
-| URI                              | What it is                              |
-| -------------------------------- | --------------------------------------- |
-| `ebay://page/<path>`    | a page, keyed by its path on www.ebay.com |
+| URI                        | What it is                          |
+| -------------------------- | ----------------------------------- |
+| `ebay://item/<id>`         | one item, keyed by its item id      |
+| `ebay://seller/<username>` | a seller's storefront profile       |
+| `ebay://category/<id>`     | a category, keyed by its numeric id |
 
 ```bash
-ant get ebay://page/<path>    # the page record
-ant cat ebay://page/<path>    # just the body text
-ant url ebay://page/<path>    # the live https URL
-ant resolve https://www.ebay.com/<path> # a pasted link, back to its URI
+ant get ebay://seller/jomashop          # the seller record
+ant get ebay://category/9355            # the category record
+ant url ebay://item/235791104766        # the live https URL
+ant resolve https://www.ebay.com/usr/jomashop  # a pasted link, back to its URI
 ```
 
-As you add resolver operations in `ebay/domain.go`, each new `URIType`
-becomes another addressable authority here, with no extra wiring. See
-[add a command](/guides/adding-a-command/).
+`item` is best-effort: from a datacenter it may hit eBay's bot wall and report
+need-auth, the same as the `ebay item` command. See
+[what anonymous access reaches](/getting-started/introduction/#what-anonymous-access-reaches).
 
 ## Walking the graph
 
@@ -51,18 +53,17 @@ becomes another addressable authority here, with no extra wiring. See
 addressable URI, so a host can follow the graph and write it to disk:
 
 ```bash
-ant ls     ebay://page/<path>             # the pages this one links to
-ant export ebay://page/<path> --follow 1 --to ./data
+ant ls     ebay://category/9355           # the items in the category, as item URIs
+ant export ebay://seller/jomashop --follow 1 --to ./data
 ```
 
-The example `links` op emits page stubs, so each listed member is a
-`ebay://page/` URI in its own right. When you model edges between your
-real records with `kit:"link"` tags, `ant export --follow` and `ant graph` walk
-those edges too, across tools when a link points at another site's scheme.
+The list operations (`category browse`, `category tree`, `seller listings`,
+`deals`, `search`) emit records that are themselves addressable, so each member
+is an `ebay://item/` or `ebay://category/` URI a host can fetch in turn.
 
 ## Why this is the same code
 
 The driver and the binary share one definition per operation. A resolver op
-answers both `ebay page` on the command line and `ant get
-ebay://page/...` through a host, from the same handler and the same
+answers both `ebay seller show` on the command line and
+`ant get ebay://seller/...` through a host, from the same handler and the same
 client. There is no second implementation to keep in step.

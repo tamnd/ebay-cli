@@ -9,10 +9,7 @@ featured: true
 Each guide is built around a job rather than a command. They assume you have run
 the [quick start](/getting-started/quick-start/).
 
-- [Add a command](/guides/adding-a-command/) — model a real ebay record
-  and turn it into a command, a route, and a tool at once.
-- [Resource URIs](/guides/resource-uris/) — use ebay as a
-  `database/sql`-style driver so a host can address ebay as
-  `ebay://` URIs.
-
-Add one guide per real task as you build out ebay.
+- [Add a command](/guides/adding-a-command/) for modelling a new eBay record
+  and turning it into a command, a route, and a tool at once.
+- [Resource URIs](/guides/resource-uris/) for using ebay as a
+  `database/sql`-style driver so a host can address eBay as `ebay://` URIs.
