@@ -34,12 +34,21 @@ func (c *Client) CategoryBrowse(ctx context.Context, ref string, limit int) ([]*
 		return nil, err
 	}
 	listings := parseCards(doc, limit)
-	rate := productRatings(parseJSONLD(doc))
+	data := productData(parseJSONLD(doc))
 	for _, l := range listings {
-		if r, ok := rate[l.ID]; ok {
-			l.Rating = r.value
-			l.Reviews = r.reviews
+		d, ok := data[l.ID]
+		if !ok {
+			continue
 		}
+		// The card is the primary source; the JSON-LD fills what it left empty
+		// and adds the rating and the image gallery the card cannot carry.
+		if l.Price == 0 {
+			l.Price, l.Currency = d.price, d.currency
+		}
+		if len(l.Images) == 0 {
+			l.Images = d.images
+		}
+		l.Rating, l.Reviews = d.rating, d.reviews
 	}
 	return listings, nil
 }
@@ -63,6 +72,7 @@ func (c *Client) GetCategory(ctx context.Context, ref string) (*Category, error)
 	cat := &Category{ID: id, URL: BaseURL + "/b/" + id}
 	trail := breadcrumb(parseJSONLD(doc))
 	if len(trail) > 0 {
+		cat.Trail = trail
 		cat.Name = trail[len(trail)-1]
 		if len(trail) > 1 {
 			cat.Parent = trail[len(trail)-2]

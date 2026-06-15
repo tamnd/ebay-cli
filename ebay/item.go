@@ -84,8 +84,20 @@ func parseItem(doc *goquery.Document, id string) *Item {
 	it.Shipping = squish(firstText(root, ".ux-labels-values--shipping .ux-textspans--BOLD", "[class*=shipping]"))
 	it.Returns = squish(firstText(root, ".ux-labels-values--returns .ux-textspans", "[class*=returns]"))
 	it.Category = lastCrumb(doc)
-	if src := firstAttr(root.Find(".ux-image-carousel img, [class*=image] img").First(), "src", "data-src"); src != "" {
-		it.Image = src
+
+	// The photo gallery: every carousel image, deduped in document order. The
+	// first is kept in Image too, so a caller that wants one still has it.
+	seen := map[string]bool{}
+	root.Find(".ux-image-carousel img, .ux-image-carousel-item img, [class*=image] img").Each(func(_ int, s *goquery.Selection) {
+		src := firstAttr(s, "src", "data-src")
+		if src == "" || seen[src] {
+			return
+		}
+		seen[src] = true
+		it.Images = append(it.Images, src)
+	})
+	if len(it.Images) > 0 {
+		it.Image = it.Images[0]
 	}
 	return it
 }

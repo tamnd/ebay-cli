@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"regexp"
+	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -57,6 +58,15 @@ func (c *Client) Deals(ctx context.Context, limit int) ([]*Deal, error) {
 		}
 		if m := offRE.FindString(orig.Text()); m != "" {
 			d.Discount = m
+		}
+		if src := firstAttr(card.Find("img").First(), "src", "data-src", "data-defer-load"); src != "" {
+			d.Image = src
+		}
+		if strings.Contains(strings.ToLower(card.Text()), "free shipping") {
+			d.FreeShipping = true
+		}
+		if card.Find(".dne-itemcard-hotness, [class*=hotness]").Length() > 0 {
+			d.Trending = true
 		}
 		seen[id] = true
 		out = append(out, d)

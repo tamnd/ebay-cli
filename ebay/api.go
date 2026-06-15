@@ -235,16 +235,17 @@ func (a *apiClient) GetItem(ctx context.Context, id string) (*Item, error) {
 	u := fmt.Sprintf("%s/item/get_item_by_legacy_id?legacy_item_id=%s",
 		a.browseBase, url.QueryEscape(id))
 	var s struct {
-		LegacyItemID  string     `json:"legacyItemId"`
-		Title         string     `json:"title"`
-		Subtitle      string     `json:"subtitle"`
-		Price         apiPrice   `json:"price"`
-		Condition     string     `json:"condition"`
-		BuyingOptions []string   `json:"buyingOptions"`
-		ItemWebURL    string     `json:"itemWebUrl"`
-		Image         *apiImage  `json:"image"`
-		Seller        *apiSeller `json:"seller"`
-		ItemLocation  *struct {
+		LegacyItemID     string     `json:"legacyItemId"`
+		Title            string     `json:"title"`
+		Subtitle         string     `json:"subtitle"`
+		Price            apiPrice   `json:"price"`
+		Condition        string     `json:"condition"`
+		BuyingOptions    []string   `json:"buyingOptions"`
+		ItemWebURL       string     `json:"itemWebUrl"`
+		Image            *apiImage  `json:"image"`
+		AdditionalImages []apiImage `json:"additionalImages"`
+		Seller           *apiSeller `json:"seller"`
+		ItemLocation     *struct {
 			City    string `json:"city"`
 			Country string `json:"country"`
 		} `json:"itemLocation"`
@@ -277,6 +278,12 @@ func (a *apiClient) GetItem(ctx context.Context, id string) (*Item, error) {
 	}
 	if s.Image != nil {
 		it.Image = s.Image.ImageURL
+		it.Images = append(it.Images, s.Image.ImageURL)
+	}
+	for _, img := range s.AdditionalImages {
+		if img.ImageURL != "" {
+			it.Images = append(it.Images, img.ImageURL)
+		}
 	}
 	if s.Seller != nil {
 		it.Seller = s.Seller.Username
