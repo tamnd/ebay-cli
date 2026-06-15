@@ -1,28 +1,68 @@
 ---
 title: "Quick start"
-description: "Fetch your first record with ebay."
+description: "Run your first ebay commands and shape their output."
 weight: 30
 ---
 
-Once `ebay` is on your `PATH`, fetch a page. The argument is the path
-of the page on www.ebay.com (everything after the host), or a full URL:
+Once `ebay` is on your `PATH`, complete a search box. `suggest` reads the
+autocomplete host and answers from any network:
 
 ```bash
-ebay page <path>
+ebay suggest "mechanical keyboard" -n 6 --fields term
 ```
 
-By default you get an aligned table. Ask for JSON when you want to pipe it:
+```
+╭───────────────────────────────╮
+│ TERM                          │
+├───────────────────────────────┤
+│ mechanical keyboard full size │
+│ mechanical keyboard wireless  │
+│ mechanical keyboard 75        │
+│ mechanical keyboard 60        │
+│ mechanical keyboard switches  │
+│ mechanical keyboard vintage   │
+╰───────────────────────────────╯
+```
+
+By default you get an aligned table on a terminal. Ask for JSON when you want to
+pipe it:
 
 ```bash
-$ ebay page <path> -o json
+ebay seller show jomashop -o json
+```
+
+```json
 [
   {
-    "id": "<path>",
-    "url": "https://www.ebay.com/<path>",
-    "title": "<path>",
-    "body": "..."
+    "username": "jomashop",
+    "store": "Jomashop",
+    "positive": 99.4,
+    "sold": 768000,
+    "followers": 78000,
+    "url": "https://www.ebay.com/usr/jomashop"
   }
 ]
+```
+
+## Read the reliable surfaces
+
+The category, seller, deals, and autocomplete surfaces read from any network:
+
+```bash
+ebay category browse 9355            # the items in a category
+ebay category show 9355              # a category's metadata
+ebay category tree 9355             # a category's child categories
+ebay seller listings jomashop        # a seller's active listings
+ebay deals                           # the current daily deals
+```
+
+The single item page and keyword search are best-effort and may hit eBay's bot
+wall from a datacenter, exiting 4. See
+[what anonymous access reaches](/getting-started/introduction/#what-anonymous-access-reaches).
+
+```bash
+ebay item 235791104766               # one item by id (best-effort)
+ebay search iphone                   # keyword search (best-effort)
 ```
 
 ## Shape the output
@@ -30,9 +70,9 @@ $ ebay page <path> -o json
 The same flags work on every command:
 
 ```bash
-ebay page <path> --fields id,url        # keep only these columns
-ebay page <path> --template '{{.Body}}' # just the body text
-ebay page <path> -o jsonl | jq .url     # one object per line, into jq
+ebay category browse 9355 --fields id,title,price,currency
+ebay deals --template '{{.Title}} {{.Price}} {{.Currency}}'
+ebay seller listings jomashop -o jsonl | jq .url
 ```
 
 `-o` takes `table`, `json`, `jsonl`, `csv`, `tsv`, `url`, or `raw`. Left to
@@ -40,15 +80,13 @@ ebay page <path> -o jsonl | jq .url     # one object per line, into jq
 command reads well by hand and parses cleanly downstream. See
 [output formats](/reference/output/) for the full contract.
 
-## Follow the links
+## Resolve a reference offline
 
-`links` lists the pages a page links to, and each one is a path you can fetch in
-turn:
+The `ref` commands classify and build eBay references with no network call:
 
 ```bash
-ebay links <path> -n 10                 # the first ten links
-ebay links <path> -o url                # just the URLs
-ebay links <path> -o url | head -3 | xargs -n1 ebay page
+ebay ref id "https://www.ebay.com/itm/Apple-iPhone-13/235791104766"
+ebay ref url item 235791104766
 ```
 
 ## Serve it instead
@@ -57,15 +95,11 @@ The same operations are available over HTTP and to agents over MCP:
 
 ```bash
 ebay serve --addr :7777 &
-curl -s 'localhost:7777/v1/page/<path>'          # NDJSON, one record per line
-ebay mcp                                # MCP over stdio: page, links
+curl -s 'localhost:7777/v1/seller/show/jomashop'   # NDJSON, one record per line
+ebay mcp                                            # MCP over stdio
 ```
 
-## What to build next
+## What to read next
 
-This scaffold ships one example type, `page`, wired end to end so the whole
-chain works today. To make it really about ebay, model the records you
-care about in `ebay/` and declare their operations in
-`ebay/domain.go`. Each one you add shows up as a command here, a route
-under `serve`, and a tool under `mcp`, with no extra wiring. The
-[guides](/guides/) cover the common jobs.
+The [guides](/guides/) cover the common jobs, and the
+[CLI reference](/reference/cli/) is the full command tree and flag list.
