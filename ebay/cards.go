@@ -1,9 +1,17 @@
 package ebay
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+)
+
+// soldCardRE and watchingRE read the social-proof lines a grid card prints next
+// to the price ("146 sold", "42 watching").
+var (
+	soldCardRE = regexp.MustCompile(`([0-9][0-9,]*)\s+sold`)
+	watchingRE = regexp.MustCompile(`([0-9][0-9,]*)\s+watching`)
 )
 
 // cards.go parses the listing grids the category, search, seller, and deals
@@ -99,6 +107,14 @@ func cardToListing(card *goquery.Selection) *Listing {
 
 	if src := firstAttr(card.Find("img").First(), "src", "data-src", "data-defer-load"); src != "" {
 		l.Thumbnail = src
+	}
+
+	text := card.Text()
+	if m := soldCardRE.FindStringSubmatch(text); m != nil {
+		l.Sold = parseInt(m[1])
+	}
+	if m := watchingRE.FindStringSubmatch(text); m != nil {
+		l.Watching = parseInt(m[1])
 	}
 	return l
 }

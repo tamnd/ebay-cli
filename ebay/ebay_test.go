@@ -33,14 +33,23 @@ func padded(s string) string {
 	return s + "<!-- " + strings.Repeat("x", 2200) + " -->"
 }
 
+// categoryPage mirrors the real /b/ markup: a multi-level BreadcrumbList and a
+// CollectionPage whose about.offers.itemOffered carries one Product per grid item
+// (price, image gallery, and a rating), with the listing cards in the body.
 const categoryPage = `<html><head>
 <script type="application/ld+json">
 {"@type":"BreadcrumbList","itemListElement":[
-  {"position":1,"name":"Cell Phones & Accessories"},
-  {"position":2,"name":"Cell Phones & Smartphones"}]}
+  {"position":1,"name":"eBay"},
+  {"position":2,"name":"Cell Phones & Accessories"},
+  {"position":3,"name":"Cell Phones & Smartphones"}]}
 </script>
 <script type="application/ld+json">
-{"@type":"Product","url":"https://www.ebay.com/itm/111111111111","aggregateRating":{"ratingValue":"4.8","reviewCount":"230"}}
+{"@type":"CollectionPage","about":{"@type":"WebPage","offers":{"@type":"Offer","itemOffered":[
+  {"@type":"Product","url":"https://www.ebay.com/itm/111111111111",
+   "image":["https://i.ebayimg.com/a.jpg","https://i.ebayimg.com/b.jpg"],
+   "offers":{"@type":"Offer","price":499.99,"priceCurrency":"USD"},
+   "aggregateRating":{"ratingValue":"4.8","reviewCount":"230"}}
+]}}}
 </script>
 </head><body>
 <ul>
@@ -56,6 +65,8 @@ const categoryPage = `<html><head>
   <div class="s-item__title">Samsung Galaxy S22</div>
   <span class="s-item__price">$399.00</span>
   <span class="SECONDARY_INFO">Brand New</span>
+  <span class="s-item__hotness">97 sold</span>
+  <span class="s-item__watchCount">5 watching</span>
 </li>
 </ul></body></html>`
 
@@ -83,8 +94,15 @@ func TestCategoryBrowse(t *testing.T) {
 	if a.Rating != 4.8 || a.Reviews != 230 {
 		t.Errorf("rating from JSON-LD = %v (%d reviews)", a.Rating, a.Reviews)
 	}
+	if len(a.Images) != 2 || a.Images[0] != "https://i.ebayimg.com/a.jpg" {
+		t.Errorf("image gallery from JSON-LD = %v", a.Images)
+	}
 	if a.URL != "https://www.ebay.com/itm/111111111111" {
 		t.Errorf("url = %q", a.URL)
+	}
+	b := got[1]
+	if b.Sold != 97 || b.Watching != 5 {
+		t.Errorf("sold/watching from card = %d / %d", b.Sold, b.Watching)
 	}
 }
 
@@ -105,11 +123,22 @@ func TestGetCategory(t *testing.T) {
 	if cat.ID != "9355" || cat.URL != "https://www.ebay.com/b/9355" {
 		t.Errorf("id/url = %q / %q", cat.ID, cat.URL)
 	}
+	wantTrail := []string{"eBay", "Cell Phones & Accessories", "Cell Phones & Smartphones"}
+	if len(cat.Trail) != len(wantTrail) {
+		t.Fatalf("trail = %v", cat.Trail)
+	}
+	for i, name := range wantTrail {
+		if cat.Trail[i] != name {
+			t.Errorf("trail[%d] = %q, want %q", i, cat.Trail[i], name)
+		}
+	}
 }
 
 // sellerPage mirrors a real storefront header, where each figure sits in its
 // own span and the follower and sold counts are K/M-abbreviated.
-const sellerPage = `<html><body>
+const sellerPage = `<html><head>
+<meta property="og:image" content="https://i.ebayimg.com/store-logo.jpg" />
+</head><body>
 <div class="str-seller-card-wrap">
   <h1 class="str-seller-card__store-name">Tech Bargains Store</h1>
   <span>99.4%</span> <span>positive feedback</span>
@@ -117,6 +146,7 @@ const sellerPage = `<html><body>
   <span>78K</span> <span>followers</span>
   <div class="str-seller-card__location">San Jose, CA</div>
 </div>
+<script>{"topRatedSeller":{"icon":{"name":"TOP_RATED_SELLER"}}}</script>
 <ul>
 <li class="s-item"><a href="/itm/333333333333">x</a>
   <div class="s-item__title">USB-C Cable</div><span class="s-item__price">$9.99</span></li>
@@ -144,6 +174,12 @@ func TestGetSeller(t *testing.T) {
 	}
 	if s.Followers != 78000 {
 		t.Errorf("followers (78K expanded) = %d", s.Followers)
+	}
+	if s.Logo != "https://i.ebayimg.com/store-logo.jpg" {
+		t.Errorf("logo from meta = %q", s.Logo)
+	}
+	if !s.TopRated {
+		t.Errorf("top-rated badge not detected")
 	}
 }
 
@@ -175,6 +211,8 @@ const dealsPage = `<html><body>
     <span class="itemtile-price-strikethrough">$199.99</span>
     <span class="clipped">Previous price: $199.99 35% off</span>
   </div>
+  <span class="dne-itemcard-hotness">Almost gone</span>
+  <span class="dne-itemtile-delivery">Free shipping</span>
 </div></body></html>`
 
 func TestDeals(t *testing.T) {
@@ -194,6 +232,15 @@ func TestDeals(t *testing.T) {
 	}
 	if d.Discount != "35% off" {
 		t.Errorf("discount = %q", d.Discount)
+	}
+	if d.Image != "x.webp" {
+		t.Errorf("image = %q", d.Image)
+	}
+	if !d.FreeShipping {
+		t.Errorf("free shipping not detected")
+	}
+	if !d.Trending {
+		t.Errorf("trending badge not detected")
 	}
 }
 
@@ -272,6 +319,11 @@ func TestItemParse(t *testing.T) {
 	<div class="x-price-primary"><span>$549.99</span></div>
 	<div class="x-item-condition-text"><span>Open box</span></div>
 	<div class="ux-labels-values--shipping"><span class="ux-textspans--BOLD">Free</span></div>
+	<div class="ux-image-carousel">
+	  <img src="https://i.ebayimg.com/one.jpg">
+	  <img src="https://i.ebayimg.com/two.jpg">
+	  <img src="https://i.ebayimg.com/one.jpg">
+	</div>
 	</body></html>`
 	ts := serve(padded(itemPage))
 	defer ts.Close()
@@ -291,5 +343,13 @@ func TestItemParse(t *testing.T) {
 	}
 	if it.Condition != "Open box" {
 		t.Errorf("condition = %q", it.Condition)
+	}
+	// The carousel lists two distinct images (one repeated); the gallery dedupes
+	// in order and Image keeps the first.
+	if len(it.Images) != 2 || it.Images[0] != "https://i.ebayimg.com/one.jpg" {
+		t.Errorf("image gallery = %v", it.Images)
+	}
+	if it.Image != "https://i.ebayimg.com/one.jpg" {
+		t.Errorf("image = %q", it.Image)
 	}
 }

@@ -15,45 +15,49 @@ package ebay
 // Listing is a summary row in a grid, emitted by search, category browse, and
 // seller listings.
 type Listing struct {
-	ID        string  `json:"id" kit:"id"`
-	Title     string  `json:"title,omitempty" table:",truncate"`
-	Price     float64 `json:"price,omitempty"`
-	Currency  string  `json:"currency,omitempty"`
-	Condition string  `json:"condition,omitempty"`
-	Buying    string  `json:"buying,omitempty"` // fixed, auction, best_offer
-	Bids      int     `json:"bids,omitempty"`   // auctions only
-	Shipping  string  `json:"shipping,omitempty"`
-	Seller    string  `json:"seller,omitempty"`
-	Rating    float64 `json:"rating,omitempty"`  // aggregate rating (category JSON-LD)
-	Reviews   int     `json:"reviews,omitempty"` // review count (category JSON-LD)
-	Thumbnail string  `json:"thumbnail,omitempty" table:",truncate"`
-	URL       string  `json:"url"`
+	ID        string   `json:"id" kit:"id"`
+	Title     string   `json:"title,omitempty" table:",truncate"`
+	Price     float64  `json:"price,omitempty"`
+	Currency  string   `json:"currency,omitempty"`
+	Condition string   `json:"condition,omitempty"`
+	Buying    string   `json:"buying,omitempty"` // fixed, auction, best_offer
+	Bids      int      `json:"bids,omitempty"`   // auctions only
+	Shipping  string   `json:"shipping,omitempty"`
+	Seller    string   `json:"seller,omitempty"`
+	Rating    float64  `json:"rating,omitempty"`  // aggregate rating (category JSON-LD)
+	Reviews   int      `json:"reviews,omitempty"` // review count (category JSON-LD)
+	Sold      int      `json:"sold,omitempty"`    // units sold, when the card prints it
+	Watching  int      `json:"watching,omitempty"`
+	Thumbnail string   `json:"thumbnail,omitempty" table:",truncate"`
+	Images    []string `json:"images,omitempty"` // image gallery (category JSON-LD itemOffered)
+	URL       string   `json:"url"`
 }
 
 // Item is the full detail for one item, emitted by item. The fields are what the
 // /itm page shows a logged-out visitor, the same fields the Browse API returns
 // on the fallback path.
 type Item struct {
-	ID           string  `json:"id" kit:"id"`
-	Title        string  `json:"title,omitempty" table:",truncate"`
-	Subtitle     string  `json:"subtitle,omitempty" table:",truncate"`
-	Price        float64 `json:"price,omitempty"`
-	Currency     string  `json:"currency,omitempty"`
-	Condition    string  `json:"condition,omitempty"`
-	Buying       string  `json:"buying,omitempty"` // fixed, auction
-	Bids         int     `json:"bids,omitempty"`   // auctions only
-	EndsAt       string  `json:"ends_at,omitempty"`
-	Available    int     `json:"available,omitempty"`
-	Sold         int     `json:"sold,omitempty"`
-	Seller       string  `json:"seller,omitempty"`
-	SellerScore  int     `json:"seller_score,omitempty"`
-	SellerRating float64 `json:"seller_rating,omitempty"`
-	Location     string  `json:"location,omitempty"`
-	Shipping     string  `json:"shipping,omitempty"`
-	Returns      string  `json:"returns,omitempty"`
-	Category     string  `json:"category,omitempty"`
-	Image        string  `json:"image,omitempty" table:",truncate"`
-	URL          string  `json:"url"`
+	ID           string   `json:"id" kit:"id"`
+	Title        string   `json:"title,omitempty" table:",truncate"`
+	Subtitle     string   `json:"subtitle,omitempty" table:",truncate"`
+	Price        float64  `json:"price,omitempty"`
+	Currency     string   `json:"currency,omitempty"`
+	Condition    string   `json:"condition,omitempty"`
+	Buying       string   `json:"buying,omitempty"` // fixed, auction
+	Bids         int      `json:"bids,omitempty"`   // auctions only
+	EndsAt       string   `json:"ends_at,omitempty"`
+	Available    int      `json:"available,omitempty"`
+	Sold         int      `json:"sold,omitempty"`
+	Seller       string   `json:"seller,omitempty"`
+	SellerScore  int      `json:"seller_score,omitempty"`
+	SellerRating float64  `json:"seller_rating,omitempty"`
+	Location     string   `json:"location,omitempty"`
+	Shipping     string   `json:"shipping,omitempty"`
+	Returns      string   `json:"returns,omitempty"`
+	Category     string   `json:"category,omitempty"`
+	Image        string   `json:"image,omitempty" table:",truncate"`
+	Images       []string `json:"images,omitempty"` // the photo gallery, when the page or API lists more than one
+	URL          string   `json:"url"`
 }
 
 // Seller is a seller's public profile, emitted by seller show.
@@ -64,28 +68,34 @@ type Seller struct {
 	Positive  float64 `json:"positive,omitempty"` // percent positive feedback
 	Sold      int     `json:"sold,omitempty"`     // lifetime items sold (storefront)
 	Followers int     `json:"followers,omitempty"`
+	TopRated  bool    `json:"top_rated,omitempty"` // the Top Rated Seller badge
 	Location  string  `json:"location,omitempty"`
+	Logo      string  `json:"logo,omitempty" table:",truncate"` // store logo image
 	URL       string  `json:"url"`
 }
 
 // Category is a category node, emitted by category show and category tree.
 type Category struct {
-	ID     string `json:"id" kit:"id"` // numeric leaf category id
-	Name   string `json:"name"`
-	Parent string `json:"parent,omitempty"` // parent category name (from the trail)
-	Node   string `json:"node,omitempty"`   // bn_<digits> browse-node id when known
-	URL    string `json:"url"`
+	ID     string   `json:"id" kit:"id"` // numeric leaf category id
+	Name   string   `json:"name"`
+	Parent string   `json:"parent,omitempty"` // parent category name (from the trail)
+	Trail  []string `json:"trail,omitempty"`  // the full ancestor path, eBay first, leaf last
+	Node   string   `json:"node,omitempty"`   // bn_<digits> browse-node id when known
+	URL    string   `json:"url"`
 }
 
 // Deal is a row on the deals hub, emitted by deals.
 type Deal struct {
-	ID       string  `json:"id" kit:"id"`
-	Title    string  `json:"title,omitempty" table:",truncate"`
-	Price    float64 `json:"price,omitempty"`
-	Was      float64 `json:"was,omitempty"` // original price
-	Currency string  `json:"currency,omitempty"`
-	Discount string  `json:"discount,omitempty"` // the badge text, e.g. "20% off"
-	URL      string  `json:"url"`
+	ID           string  `json:"id" kit:"id"`
+	Title        string  `json:"title,omitempty" table:",truncate"`
+	Price        float64 `json:"price,omitempty"`
+	Was          float64 `json:"was,omitempty"` // original price
+	Currency     string  `json:"currency,omitempty"`
+	Discount     string  `json:"discount,omitempty"` // the badge text, e.g. "20% off"
+	FreeShipping bool    `json:"free_shipping,omitempty"`
+	Trending     bool    `json:"trending,omitempty"` // the tile carries a hotness badge
+	Image        string  `json:"image,omitempty" table:",truncate"`
+	URL          string  `json:"url"`
 }
 
 // Suggestion is one autocomplete term, emitted by suggest.

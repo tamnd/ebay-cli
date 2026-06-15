@@ -82,6 +82,15 @@ func (c *Client) GetSeller(ctx context.Context, ref string) (*Seller, error) {
 		s.Score = parseInt(m[1])
 	}
 	s.Location = squish(firstText(doc.Selection, ".str-seller-card__location", "[class*=location]"))
+
+	// The store logo rides on the social-card meta tags; the storefront header
+	// only links it, it does not carry the image source itself.
+	s.Logo = metaContent(doc, "og:image", "twitter:image")
+	// The Top Rated Seller badge is rendered from a small embedded JSON object
+	// keyed on this name, present whether or not the visitor is signed in.
+	if bytes.Contains(body, []byte("TOP_RATED_SELLER")) {
+		s.TopRated = true
+	}
 	return s, nil
 }
 
