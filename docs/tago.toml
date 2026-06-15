@@ -1,0 +1,10 @@
+title       = "ebay"
+baseURL     = "https://ebay-cli.tamnd.com/"
+description = "ebay reads public eBay data (search, items, sellers, categories, deals, autocomplete) into structured records over a CLI, an HTTP server, and an MCP tool set."
+contentDir  = "content"
+outputDir   = "public"
+theme       = "tago-doks"
+syntaxHighlight = "true"
+
+[params]
+github = "https://github.com/tamnd/ebay-cli"
