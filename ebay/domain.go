@@ -2,49 +2,60 @@ package ebay
 
 import (
 	"context"
-	"net/url"
-	"strings"
+	"errors"
+	"os"
+	"time"
 
 	"github.com/tamnd/any-cli/kit"
 	"github.com/tamnd/any-cli/kit/errs"
 )
 
-// domain.go exposes ebay as a kit Domain: a driver that a multi-domain
-// host (ant) enables with a single blank import,
+// domain.go exposes ebay as a kit Domain: a driver that a multi-domain host
+// (ant) enables with a single blank import,
 //
 //	import _ "github.com/tamnd/ebay-cli/ebay"
 //
 // exactly as a database/sql program enables a driver with `import _
 // "github.com/lib/pq"`. The init below registers it; the host then dereferences
-// ebay:// URIs by routing to the operations Register installs. The same
-// Domain also builds the standalone ebay binary (see cli.NewApp), so the
-// binary and a host share one source of truth.
-//
-// This is the scaffold's starting point: one resource type, "page", served by a
-// resolver op and a list op. Add your real types here as you model the site.
+// ebay:// URIs by routing to the operations Register installs. The same Domain
+// also builds the standalone ebay binary (see cli.NewApp), so the binary and a
+// host share one source of truth.
 func init() { kit.Register(Domain{}) }
 
-// Domain is the ebay driver. It carries no state; the per-run client is
-// built by the factory Register hands kit.
+// Domain is the ebay driver. It carries no state; the per-run client is built by
+// the factory Register hands kit.
 type Domain struct{}
 
 // Info describes the scheme, the hostnames a pasted link is matched against, and
 // the identity reused for the binary's help and version.
 func (Domain) Info() kit.DomainInfo {
 	return kit.DomainInfo{
-		Scheme: "ebay",
-		Hosts:  []string{Host},
-		Identity: kit.Identity{
-			Binary: "ebay",
-			Short:  "Read public eBay listings, items, sellers, categories, and deals into structured records.",
-			Long: `Read public eBay listings, items, sellers, categories, and deals into structured records.
+		Scheme:   "ebay",
+		Hosts:    []string{Host, "ebay.com", "m.ebay.com"},
+		Identity: Identity(),
+	}
+}
 
-ebay reads public ebay data over plain HTTPS, shapes it into
-clean records, and prints output that pipes into the rest of your tools. No API
-key, nothing to run alongside it.`,
-			Site: Host,
-			Repo: "https://github.com/tamnd/ebay-cli",
-		},
+// Identity is the fixed description of the ebay CLI, shared by the domain and the
+// standalone composition root so help and version read the same everywhere.
+func Identity() kit.Identity {
+	return kit.Identity{
+		Binary: "ebay",
+		Short:  "Read public eBay listings, items, sellers, categories, and deals into structured records",
+		Long: `ebay reads public eBay data the way a logged-out browser does:
+keyword search, a single item, a seller and their listings, a category
+and the items in it, the current deals, and search autocomplete. The
+category, seller, deals, and autocomplete surfaces read from any
+network; the item page and keyword search are walled from datacenter
+IPs by eBay's bot manager, so those are best-effort and fall back to
+the Browse API when EBAY_CLIENT_ID and EBAY_CLIENT_SECRET are set.
+There is no API key needed for the core, no login, and nothing to run
+alongside it. It returns records as a table, JSON, JSONL, CSV, TSV, or
+URLs, and serves the same operations over HTTP and MCP.
+
+ebay is an independent tool and is not affiliated with eBay.`,
+		Site: BaseURL,
+		Repo: "https://github.com/tamnd/ebay-cli",
 	}
 }
 
@@ -53,121 +64,189 @@ key, nothing to run alongside it.`,
 // enumerates a parent resource's members and answers `ant ls`.
 func (Domain) Register(app *kit.App) {
 	app.SetClient(newClient)
+	app.CommandGroup("read", "Read public eBay data")
+	app.CommandGroup("seller", "Read a seller and their listings")
+	app.CommandGroup("category", "Read a category, its items, and its children")
+	app.CommandGroup("ref", "Resolve references to ids and URLs (offline)")
 
-	// Resolver op: one record per id, the home of `ebay page` and
-	// `ant get ebay://page/<id>`.
-	kit.Handle(app, kit.OpMeta{Name: "page", Group: "read", Single: true,
-		Summary: "Fetch a page by path or URL", URIType: "page", Resolver: true,
-		Args: []kit.Arg{{Name: "ref", Help: "page path or URL"}}}, getPage)
+	// Top-level reads.
+	kit.Handle(app, kit.OpMeta{
+		Name: "search", Group: "read", List: true,
+		Summary: "Search listings by keyword",
+		URIType: "item",
+		Args:    []kit.Arg{{Name: "query", Help: "search keywords"}},
+	}, search)
 
-	// List op: members of a page, the home of `ebay links` and `ant ls`.
-	// It emits page stubs, so every listed member is itself an addressable
-	// ebay://page/ URI a host can follow.
-	kit.Handle(app, kit.OpMeta{Name: "links", Group: "read", List: true,
-		Summary: "List the pages a page links to", URIType: "page",
-		Args: []kit.Arg{{Name: "ref", Help: "page path or URL"}}}, listLinks)
+	kit.Handle(app, kit.OpMeta{
+		Name: "item", Group: "read", Single: true,
+		Summary: "Show one item by id",
+		URIType: "item", Resolver: true,
+		Args: []kit.Arg{{Name: "id", Help: "item id or /itm/ URL"}},
+	}, getItem)
+
+	kit.Handle(app, kit.OpMeta{
+		Name: "deals", Group: "read", List: true,
+		Summary: "The current deals",
+		URIType: "item",
+	}, deals)
+
+	kit.Handle(app, kit.OpMeta{
+		Name: "suggest", Group: "read", List: true,
+		Summary: "Search autocomplete suggestions",
+		Args:    []kit.Arg{{Name: "prefix", Help: "the typed prefix"}},
+	}, suggest)
+
+	// Seller: metadata, listings.
+	kit.Handle(app, kit.OpMeta{
+		Name: "show", Parent: "seller", Single: true,
+		Summary: "Show a seller's profile",
+		URIType: "seller", Resolver: true,
+		Args: []kit.Arg{{Name: "username", Help: "seller username, store, or URL"}},
+	}, getSeller)
+
+	kit.Handle(app, kit.OpMeta{
+		Name: "listings", Parent: "seller", List: true,
+		Summary: "List a seller's active listings",
+		URIType: "item",
+		Args:    []kit.Arg{{Name: "username", Help: "seller username, store, or URL"}},
+	}, sellerListings)
+
+	// Category: metadata, items, children.
+	kit.Handle(app, kit.OpMeta{
+		Name: "show", Parent: "category", Single: true,
+		Summary: "Show a category's metadata",
+		URIType: "category", Resolver: true,
+		Args: []kit.Arg{{Name: "id", Help: "category id or /b/ URL"}},
+	}, getCategory)
+
+	kit.Handle(app, kit.OpMeta{
+		Name: "browse", Parent: "category", List: true,
+		Summary: "List the items in a category",
+		URIType: "item",
+		Args:    []kit.Arg{{Name: "id", Help: "category id or /b/ URL"}},
+	}, categoryBrowse)
+
+	kit.Handle(app, kit.OpMeta{
+		Name: "tree", Parent: "category", List: true,
+		Summary: "List a category's child categories",
+		URIType: "category",
+		Args:    []kit.Arg{{Name: "id", Help: "category id or /b/ URL"}},
+	}, categoryTree)
+
+	// Reference tools (offline).
+	kit.Handle(app, kit.OpMeta{
+		Name: "id", Parent: "ref", Single: true,
+		Summary: "Classify a reference into its (kind, id)",
+		Args:    []kit.Arg{{Name: "ref", Help: "any eBay URL, path, or id"}},
+	}, classifyRef)
+
+	kit.Handle(app, kit.OpMeta{
+		Name: "url", Parent: "ref", Single: true,
+		Summary: "Build the canonical URL for a (kind, id)",
+		Args: []kit.Arg{
+			{Name: "kind", Help: "item, seller, or category"},
+			{Name: "id", Help: "the id for that kind"},
+		},
+	}, buildURL)
 }
 
 // newClient builds the client from the host-resolved config, so a host and the
 // standalone binary pace and identify themselves the same way.
 func newClient(_ context.Context, cfg kit.Config) (any, error) {
-	c := NewClient()
-	if cfg.UserAgent != "" {
-		c.UserAgent = cfg.UserAgent
-	}
+	return ClientFromConfig(cfg), nil
+}
+
+// ClientFromConfig maps the framework config onto an ebay.Config and returns a
+// client. The Browse credentials are read from the environment, not flags, so
+// they never land in shell history.
+func ClientFromConfig(cfg kit.Config) *Client {
+	ec := DefaultConfig()
 	if cfg.Rate > 0 {
-		c.Rate = cfg.Rate
+		ec.Delay = cfg.Rate
 	}
-	if cfg.Retries > 0 {
-		c.Retries = cfg.Retries
+	if cfg.Retries >= 0 {
+		ec.Retries = cfg.Retries
 	}
 	if cfg.Timeout > 0 {
-		c.HTTP.Timeout = cfg.Timeout
+		ec.Timeout = cfg.Timeout
 	}
-	return c, nil
-}
-
-// --- inputs ---
-//
-// Each handler takes a typed input struct. kit fills the fields from the tags:
-// kit:"arg" is a positional argument, kit:"flag,inherit" binds the framework's
-// shared flag of the same name, and kit:"inject" receives the client newClient
-// builds.
-
-type pageRef struct {
-	Ref    string  `kit:"arg" help:"page path or URL"`
-	Client *Client `kit:"inject"`
-}
-
-type listRef struct {
-	Ref    string  `kit:"arg" help:"page path or URL"`
-	Limit  int     `kit:"flag,inherit" help:"max results"`
-	Client *Client `kit:"inject"`
-}
-
-// --- handlers ---
-
-func getPage(ctx context.Context, in pageRef, emit func(*Page) error) error {
-	p, err := in.Client.GetPage(ctx, pagePath(in.Ref))
-	if err != nil {
-		return mapErr(err)
+	if ua := cfg.Extra["user-agent"]; ua != "" {
+		ec.UserAgent = ua
+	} else if cfg.UserAgent != "" {
+		ec.UserAgent = cfg.UserAgent
 	}
-	return emit(p)
-}
-
-func listLinks(ctx context.Context, in listRef, emit func(*Page) error) error {
-	pages, err := in.Client.PageLinks(ctx, pagePath(in.Ref), in.Limit)
-	if err != nil {
-		return mapErr(err)
+	if m := cfg.Extra["marketplace"]; m != "" {
+		ec.Marketplace = m
+	} else if m := os.Getenv("EBAY_MARKETPLACE"); m != "" {
+		ec.Marketplace = m
 	}
-	for _, p := range pages {
-		if err := emit(p); err != nil {
-			return err
+	ec.ClientID = os.Getenv("EBAY_CLIENT_ID")
+	ec.ClientSecret = os.Getenv("EBAY_CLIENT_SECRET")
+	ec.CacheDir = cfg.CacheDir
+	ec.NoCache = cfg.NoCache
+	if ttl := cfg.Extra["cache-ttl"]; ttl != "" {
+		if d, err := time.ParseDuration(ttl); err == nil {
+			ec.CacheTTL = d
 		}
 	}
-	return nil
+	ec.Refresh = cfg.Extra["refresh"] == "true"
+	return NewClient(ec)
 }
 
-// --- Resolver: the URI-native string functions, pure and network-free ---
+// Defaults seeds the framework baseline with ebay's own values, so an unset
+// --rate or --timeout uses the ebay default rather than the generic kit one. It
+// is passed to kit.New via kit.WithDefaults.
+func Defaults(c *kit.Config) {
+	def := DefaultConfig()
+	c.Rate = def.Delay
+	c.Retries = def.Retries
+	c.Timeout = def.Timeout
+	c.UserAgent = def.UserAgent
+}
 
-// Classify turns any accepted input — a bare path or a full www.ebay.com URL —
-// into the canonical (type, id), so `ant resolve` and `ant url` touch no network.
+// Classify turns any accepted input into the canonical (type, id), so `ant
+// resolve` and `ant url` touch no network.
 func (Domain) Classify(input string) (uriType, id string, err error) {
-	id = pagePath(input)
-	if id == "" {
+	r := Classify(input)
+	if r.Kind == "unknown" {
 		return "", "", errs.Usage("unrecognized ebay reference: %q", input)
 	}
-	return "page", id, nil
+	return r.Kind, r.ID, nil
 }
 
 // Locate is the inverse: the live https URL for a (type, id).
 func (Domain) Locate(uriType, id string) (string, error) {
-	if uriType != "page" {
+	u := URLFor(uriType, id)
+	if u == "" {
 		return "", errs.Usage("ebay has no resource type %q", uriType)
 	}
-	return BaseURL + "/" + strings.Trim(id, "/"), nil
+	return u, nil
 }
 
-// --- helpers ---
-
-// pagePath turns any accepted input into the canonical page id: the path of a
-// full URL on this host, or a bare path with its slashes trimmed.
-func pagePath(input string) string {
-	input = strings.TrimSpace(input)
-	if u, err := url.Parse(input); err == nil && (u.Scheme == "http" || u.Scheme == "https") {
-		return strings.Trim(u.Path, "/")
-	}
-	return strings.Trim(input, "/")
-}
-
-// mapErr converts a library error into the kit error kind that carries the right
-// exit code, so a host renders the same outcomes the standalone binary does. As
-// you add sentinel errors to the library, map them here, for example:
-//
-//	case errors.Is(err, ErrNotFound):
-//		return errs.NotFound("%s", err.Error())
-//	case errors.Is(err, ErrRateLimited):
-//		return errs.RateLimited("%s", err.Error())
+// mapErr translates a library error into a kit error so the exit code matches the
+// rest of the fleet: a missing entity reads as "not found" (exit 6), a throttle
+// as "rate limited" (exit 5), and the bot wall as "need auth" (exit 4).
 func mapErr(err error) error {
-	return err
+	if err == nil {
+		return nil
+	}
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return errs.NotFound("%s", err.Error())
+	case errors.Is(err, ErrRateLimited):
+		return errs.RateLimited("%s", err.Error())
+	case errors.Is(err, ErrBlocked):
+		return errs.NeedAuth("%s", err.Error())
+	default:
+		return err
+	}
+}
+
+// limitOr returns the operator's --limit when set, else the command's own
+// default fetch count.
+func limitOr(limit, def int) int {
+	if limit > 0 {
+		return limit
+	}
+	return def
 }
